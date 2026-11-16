@@ -85,6 +85,12 @@ def main():
             kept.append(block)
 
     root = patch_repositories("\n\n".join(kept))
+    # JitPack's v1.3.2 POM points at an unresolvable discord-rpc-release:-SNAPSHOT.
+    # v2.0.0 has the same API and a working native dependency.
+    root = root.replace(
+        "com.github.MinnDevelopment:java-discord-rpc:v1.3.2",
+        "com.github.MinnDevelopment:java-discord-rpc:v2.0.0",
+    )
     if "jitpack.io" not in root:
         root = root.replace(
             "repositories {",
