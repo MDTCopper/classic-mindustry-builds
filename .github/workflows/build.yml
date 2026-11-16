@@ -2,6 +2,15 @@ name: Build Classic Releases
 
 on:
   workflow_dispatch:
+    inputs:
+      build:
+        description: 'Single build number to test (33-57). Leave empty to build all.'
+        required: false
+        default: ''
+      publish:
+        description: 'Publish or update the release'
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -10,8 +19,33 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+      - name: Compute builds
+        id: matrix
+        env:
+          BUILD: ${{ inputs.build }}
+        run: |
+          if [ -z "$BUILD" ]; then
+            list="$(seq -s, 33 57)"
+          else
+            if ! printf '%s' "$BUILD" | grep -Eq '^(3[3-9]|4[0-9]|5[0-7])$'; then
+              echo "build must be between 33 and 57" >&2
+              exit 1
+            fi
+            list="$BUILD"
+          fi
+          echo "matrix={\"build\":[$list]}" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.build }}
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -21,8 +55,7 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 6
-      matrix:
-        build: [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout
@@ -53,6 +86,7 @@ jobs:
   publish:
     name: Publish release
     needs: build
+    if: ${{ inputs.publish }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -70,6 +104,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: classic-33-57
+          target_commitish: ${{ github.sha }}
           name: Mindustry Classic Builds 33-57
           body: |
             Desktop jars built from the `v33`-`v57` tags of
@@ -80,3 +115,16 @@ jobs:
           files: release/*.jar
           overwrite_files: true
           make_latest: false
+
+      # Updating a release leaves its tag alone, so move it to the commit this run built from.
+      - name: Point the release tag at this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/git/ref/tags/classic-33-57" > /dev/null 2>&1; then
+            gh api --method PATCH "repos/${{ github.repository }}/git/refs/tags/classic-33-57" \
+              -f sha="${{ github.sha }}" -F force=true
+          else
+            gh api --method POST "repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/tags/classic-33-57" -f sha="${{ github.sha }}"
+          fi

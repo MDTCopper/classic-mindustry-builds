@@ -33,15 +33,37 @@ def blocks(text):
         yield match.group(1), match.group(2), "".join(lines[start:i])
 
 
+def remove_sonatype_blocks(text):
+    """Drop maven { ... } blocks pointing at the retired Sonatype hosts.
+
+    The blocks may be one line or several, so match braces instead of lines.
+    """
+    lines = text.splitlines(keepends=True)
+    result = []
+    i = 0
+    while i < len(lines):
+        if re.match(r'^\s*maven\s*\{', lines[i]):
+            block = []
+            depth = 0
+            while i < len(lines):
+                depth += lines[i].count("{") - lines[i].count("}")
+                block.append(lines[i])
+                i += 1
+                if depth <= 0:
+                    break
+            if "oss.sonatype.org" in "".join(block):
+                continue
+            result.extend(block)
+            continue
+        result.append(lines[i])
+        i += 1
+    return "".join(result)
+
+
 def patch_repositories(text):
     text = text.replace("mavenLocal()", "")
     text = text.replace("jcenter()", "")
-    text = re.sub(
-        r'^\s*maven\s*\{\s*url\s*["\']https://oss\.sonatype\.org[^\n]*\n',
-        "",
-        text,
-        flags=re.M,
-    )
+    text = remove_sonatype_blocks(text)
     text = re.sub(r'^\s*google\(\)\s*\n', "", text, flags=re.M)
     # Old Gradle's mavenCentral() can still use the retired plain-HTTP endpoint.
     text = text.replace(
@@ -69,6 +91,21 @@ def main():
             "repositories {\n        maven { url 'https://jitpack.io' }",
             1,
         )
+
+    # Tags 33-40 pack textures from a core build script that imports gdx-tools.
+    core_script = mindustry / "core" / "build.gradle"
+    if core_script.exists() and "com.badlogic.gdx.tools" in core_script.read_text():
+        root = (
+            "buildscript {\n"
+            "    repositories {\n"
+            "        maven { url 'https://repo.maven.apache.org/maven2' }\n"
+            "    }\n"
+            "    dependencies {\n"
+            "        classpath 'com.badlogicgames.gdx:gdx-tools:1.9.8'\n"
+            "    }\n"
+            "}\n\n"
+        ) + root
+
     (mindustry / "build.gradle").write_text(root)
 
     (mindustry / "settings.gradle").write_text(
