@@ -1,0 +1,82 @@
+name: Build Classic Releases
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: classic-mindustry-builds
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.build }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        build: [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v5
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Build desktop jar
+        env:
+          BUILD: ${{ matrix.build }}
+        run: bash scripts/build.sh
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v7
+        with:
+          name: mindustry-desktop-${{ matrix.build }}
+          path: out/*.jar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download jars
+        uses: actions/download-artifact@v8
+        with:
+          pattern: mindustry-desktop-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish or update the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: classic-33-57
+          name: Mindustry Classic Builds 33-57
+          body: |
+            Desktop jars built from the `v33`-`v57` tags of
+            [Anuken/Mindustry](https://github.com/Anuken/Mindustry).
+
+            Each jar is named `Mindustry-Desktop-<build>.jar`, where `<build>` is
+            the `build` value in the jar's `version.properties`.
+          files: release/*.jar
+          overwrite_files: true
+          make_latest: false
