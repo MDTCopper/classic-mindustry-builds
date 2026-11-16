@@ -47,9 +47,10 @@ if [ -z "$jar" ]; then
 fi
 
 # The jar must identify itself with the build field this job was asked to produce.
-unzip -p "$jar" version.properties > "$work/version.properties"
+unzip -p "$jar" version.properties | tr -d '\r' > "$work/version.properties"
+cat "$work/version.properties"
 grep -qx "build=$BUILD" "$work/version.properties"
-grep -q '^Main-Class: io\.anuke\.mindustry\.desktop\.DesktopLauncher$' <(unzip -p "$jar" META-INF/MANIFEST.MF)
+unzip -p "$jar" META-INF/MANIFEST.MF | tr -d '\r' | grep -qx 'Main-Class: io\.anuke\.mindustry\.desktop\.DesktopLauncher'
 
 target="$out/Mindustry-Desktop-$BUILD.jar"
 cp "$jar" "$target"
