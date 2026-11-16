@@ -4,3 +4,6 @@
 
 # Local
 .local/
+
+# Python
+__pycache__/
